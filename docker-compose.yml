@@ -1,0 +1,137 @@
+version: "3.8"
+
+services:
+  # --- VPN MULLVAD (GLUETUN) ---
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+    ports:
+      - 8080:8080 # Interface web de qBittorrent
+      - 6881:6881 # Port Torrent TCP
+      - 6881:6881/udp # Port Torrent UDP
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${MULLVAD_WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${MULLVAD_WIREGUARD_ADDRESS}
+      - SERVER_COUNTRIES=Switzerland
+      - TZ=Europe/Paris
+    restart: unless-stopped
+
+  # --- 2. QBITTORRENT (Tout passe par le VPN) ---
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun" # Utilise le réseau chiffré de Gluetun
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+      - WEBUI_PORT=8080
+    volumes:
+      - qbittorrent_config:/config
+      - /mnt/media:/media
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- 3. CLOUDFLARE TUNNEL (Accès distant sécurisé pour plexamp) ---
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+
+  # --- 4. MEDIA SERVER : PLEX (Base pour Plexamp) ---
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    network_mode: host # Indispensable pour la découverte réseau locale et les performances
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+      - VERSION=docker
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    volumes:
+      - plex_config:/config
+      - /mnt/media:/media
+    restart: unless-stopped
+
+  # --- 5. AUTOMATISATION (ARR STACK) ---
+
+  # --- SONARR (Séries) ---
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - 8989:8989
+    volumes:
+      - sonarr_config:/config
+      - /mnt/media:/media
+    restart: unless-stopped
+
+  # --- RADARR (Films) ---
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - 7878:7878
+    volumes:
+      - radarr_config:/config
+      - /mnt/media:/media
+    restart: unless-stopped
+
+  # --- LIDARR (Gestion automatique de la musique & discographies) ---
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - 8686:8686
+    volumes:
+      - lidarr_config:/config
+      - /mnt/media:/media
+    restart: unless-stopped
+
+  # --- PROWLARR (Gestionnaire d'indexeurs/Trackers) ---
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
+    ports:
+      - 9696:9696
+    volumes:
+      - prowlarr_config:/config
+    restart: unless-stopped
+
+volumes:
+  plex_config:
+  lidarr_config:
+  qbittorrent_config:
+  sonarr_config:
+  radarr_config:
+  prowlarr_config:
