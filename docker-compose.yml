@@ -15,6 +15,7 @@ services:
       - 8080:8080 # Interface web de qBittorrent
       - 6881:6881 # Port Torrent TCP
       - 6881:6881/udp # Port Torrent UDP
+      - 5030:5030 # Interface web de slskd
     environment:
       - VPN_SERVICE_PROVIDER=mullvad
       - VPN_TYPE=wireguard
@@ -126,6 +127,63 @@ services:
       - 9696:9696
     volumes:
       - prowlarr_config:/config
+    restart: unless-stopped
+
+  # --- 6. MUSIQUE A LA DEMANDE : PICKARR + SLSKD ---
+
+  # --- SLSKD (Client Soulseek, passe par le VPN comme qBittorrent) ---
+  slskd:
+    image: slskd/slskd:latest
+    container_name: slskd
+    network_mode: "service:gluetun"
+    user: "1000:1000"
+    environment:
+      - TZ=Europe/Paris
+      - SLSKD_REMOTE_CONFIGURATION=false
+      - SLSKD_SLSK_USERNAME=${SLSKD_SLSK_USERNAME}
+      - SLSKD_SLSK_PASSWORD=${SLSKD_SLSK_PASSWORD}
+      - SLSKD_USERNAME=${SLSKD_WEB_USERNAME}
+      - SLSKD_PASSWORD=${SLSKD_WEB_PASSWORD}
+      - SLSKD_API_KEY=${SLSKD_API_KEY}
+      # incomplete et downloads sur le même volume : renommage au lieu de copie
+      - SLSKD_DOWNLOADS_DIR=/media/downloads/soulseek
+      - SLSKD_INCOMPLETE_DIR=/media/downloads/soulseek-incomplete
+      - SLSKD_SHARED_DIR=/media/Musiques
+    volumes:
+      - /opt/appdata/slskd:/app
+      - /mnt/media:/media
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- PICKARR (Lien Spotify/YouTube/SoundCloud -> bibliothèque musicale Plex) ---
+  pickarr:
+    image: registry.gitlab.com/dhmetha/pickarr:unetha
+    container_name: pickarr
+    user: "1000:1000"
+    extra_hosts:
+      - host.docker.internal:host-gateway # Plex est en network_mode host
+    ports:
+      - 8090:8080
+    environment:
+      - TZ=Europe/Paris
+      - Pickarr__Password=${PICKARR_PASSWORD}
+      - Pickarr__ApiKey=${PICKARR_API_KEY}
+      - Pickarr__Soulseek__Url=http://gluetun:5030
+      - Pickarr__Soulseek__ApiKey=${SLSKD_API_KEY}
+      - Pickarr__Soulseek__DownloadsPath=/soulseek
+      - Pickarr__Plex__Url=http://host.docker.internal:32400
+      - Pickarr__Plex__Token=${PLEX_TOKEN}
+      - Pickarr__Plex__LibraryPathInPlex=/media/Musiques/pickarr # le dossier tel que Plex le voit
+      - Pickarr__LastFm__ApiKey=${LASTFM_API_KEY}
+      - Pickarr__Discogs__Token=${DISCOGS_TOKEN}
+    volumes:
+      - /opt/appdata/pickarr:/data
+      - /mnt/media/Musiques/pickarr:/music
+      - /mnt/media/downloads/soulseek:/soulseek
+    depends_on:
+      - slskd
     restart: unless-stopped
 
 volumes:
