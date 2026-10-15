@@ -34,6 +34,7 @@ docker compose logs -f <svc>
 - **plex** — `network_mode: host` (needed for LAN discovery), so it has no `ports:` mapping. Remote access for Plexamp is via **cloudflared** (Cloudflare Tunnel, configured remotely through `CLOUDFLARE_TUNNEL_TOKEN`).
 - **slskd** (Soulseek client) — also `network_mode: "service:gluetun"`; its web UI port 5030 is published on gluetun, and other containers reach it at `http://gluetun:5030`. Downloads and incomplete dirs are both under `/mnt/media/downloads/` (must stay on the same volume so slskd renames instead of copying).
 - **pickarr** ([gitlab.com/dhmetha/pickarr](https://gitlab.com/dhmetha/pickarr)) — turns a Spotify/YouTube/SoundCloud link into a tagged file in `/mnt/media/Musiques/pickarr` (a single folder: it cannot split by quality like the existing `Musiques/lossless` and `Musiques/Standard`), sourcing audio from slskd first, then yt-dlp, then triggers a Plex scan. Runs as UID 1000 (non-root), so its `/opt/appdata/pickarr` bind mount must be owned by 1000. Reaches Plex via `host.docker.internal:32400` (`extra_hosts: host-gateway`) because Plex is on the host network. Web UI on port 8090.
+- **discoverr** ([discoverr/](discoverr/), image `ghcr.io/jboucly/discoverr`, published from its own repo) — weekly "Découvertes de la semaine". See the dedicated section below.
 - **\*arr stack** — sonarr (8989, series), radarr (7878, movies), lidarr (8686, music), prowlarr (9696, indexers). These are not behind the VPN.
 
 Shared conventions across services: `PUID/PGID=1000`, `TZ=Europe/Paris`, linuxserver.io images, a named volume `<service>_config` for `/config`, and the host path `/mnt/media` mounted at `/media` (same path in every container so download/import paths match between qBittorrent and the *arr apps). A new service's config volume must also be declared under the top-level `volumes:`.
@@ -41,3 +42,7 @@ Shared conventions across services: `PUID/PGID=1000`, `TZ=Europe/Paris`, linuxse
 ## Secrets
 
 Required in `.env` (see [.env.example](.env.example)): `MULLVAD_WIREGUARD_PRIVATE_KEY`, `MULLVAD_WIREGUARD_ADDRESS`, `CLOUDFLARE_TUNNEL_TOKEN`, `PLEX_CLAIM`, plus the Pickarr/slskd variables (`PLEX_TOKEN`, `SLSKD_API_KEY` shared by both, etc.). The `mullvad_wireguard_macos_ch_zrh/` directory (raw Mullvad configs) is gitignored.
+
+## discoverr
+
+[discoverr/](discoverr/) is a separate project (to be published in its own repo) that is deployed here: services `discoverr` and `pickarr-discovery` in the compose file. Its own docs are in [discoverr/README.md](discoverr/README.md) and [discoverr/CLAUDE.md](discoverr/CLAUDE.md). Keep everything discoverr-specific (code, CI, docs, example compose) inside that folder.

@@ -186,6 +186,71 @@ services:
       - slskd
     restart: unless-stopped
 
+  # --- 7. DECOUVERTES DE LA SEMAINE ---
+
+  # --- PICKARR-DISCOVERY (2e instance de pickarr qui écrit uniquement dans Musiques/Decouvertes) ---
+  # A retirer le jour où pickarr saura écrire dans un sous-dossier (voir PICKARR_SUBFOLDER).
+  pickarr-discovery:
+    image: registry.gitlab.com/dhmetha/pickarr:unetha
+    container_name: pickarr-discovery
+    user: "1000:1000"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      - TZ=Europe/Paris
+      - Pickarr__Password=${PICKARR_PASSWORD}
+      - Pickarr__ApiKey=${DISCOVERY_PICKARR_API_KEY}
+      - Pickarr__Soulseek__Url=http://gluetun:5030
+      - Pickarr__Soulseek__ApiKey=${SLSKD_API_KEY}
+      - Pickarr__Soulseek__DownloadsPath=/soulseek
+      - Pickarr__Plex__Url=http://host.docker.internal:32400
+      - Pickarr__Plex__Token=${PLEX_TOKEN}
+      - Pickarr__Plex__LibraryPathInPlex=/media/Musiques/Decouvertes
+      - Pickarr__LastFm__ApiKey=${LASTFM_API_KEY}
+      - Pickarr__Discogs__Token=${DISCOGS_TOKEN}
+    volumes:
+      - /opt/appdata/pickarr-discovery:/data
+      - /mnt/media/Musiques/Decouvertes:/music
+      - /mnt/media/downloads/soulseek:/soulseek
+    depends_on:
+      - slskd
+    restart: unless-stopped
+
+  # --- DISCOVERR (Last.fm -> pickarr-discovery -> playlist Plex, ménage des titres non aimés) ---
+  discoverr:
+    image: ghcr.io/jboucly/discoverr:latest
+    container_name: discoverr
+    user: "1000:1000"
+    init: true # node en PID 1 ignore SIGTERM : arrêt immédiat au redéploiement
+    extra_hosts:
+      - host.docker.internal:host-gateway # Plex est en network_mode host
+    ports:
+      - 8091:3000 # Interface web
+    # Secrets, URLs et chemins uniquement : planification, profils, notifications… se règlent dans l'interface.
+    environment:
+      - TZ=Europe/Paris
+      - DISCOVERR_PASSWORD=${DISCOVERR_PASSWORD}
+      - DISCOVERR_API_KEY=${DISCOVERR_API_KEY}
+      - LASTFM_API_KEY=${LASTFM_API_KEY}
+      - PICKARR_URL=http://pickarr-discovery:8080
+      - PICKARR_API_KEY=${DISCOVERY_PICKARR_API_KEY}
+      - PICKARR_SUBFOLDER=
+      - PICKARR_LIBRARY_SUBDIR=Decouvertes
+      - PLEX_URL=http://host.docker.internal:32400
+      - PLEX_TOKEN=${PLEX_TOKEN}
+      - MUSIC_ROOT=/music
+      - PLEX_MUSIC_ROOT=/media/Musiques
+      - DISCOVERY_SUBDIR=Decouvertes
+      # Premier démarrage seulement : profil « Moi » créé avec ce compte, et mode simulation activé.
+      - LASTFM_USER=${LASTFM_USER}
+      - DRY_RUN=${DISCOVERR_DRY_RUN:-true}
+    volumes:
+      - /opt/appdata/discoverr:/data
+      - /mnt/media/Musiques:/music
+    depends_on:
+      - pickarr-discovery
+    restart: unless-stopped
+
 volumes:
   plex_config:
   lidarr_config:
