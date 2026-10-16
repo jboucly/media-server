@@ -158,8 +158,10 @@ services:
     restart: unless-stopped
 
   # --- PICKARR (Lien Spotify/YouTube/SoundCloud -> bibliothèque musicale Plex) ---
+  # Image construite par la CI de github.com/jboucly/discoverr (workflow « pickarr image ») : package GHCR privé,
+  # le LXC doit être connecté à ghcr.io. Sert aussi à discoverr, qui envoie ses picks dans le sous-dossier Decouvertes.
   pickarr:
-    image: registry.gitlab.com/dhmetha/pickarr:unetha
+    image: ghcr.io/jboucly/pickarr:latest
     container_name: pickarr
     user: "1000:1000"
     extra_hosts:
@@ -188,35 +190,7 @@ services:
 
   # --- 7. DECOUVERTES DE LA SEMAINE ---
 
-  # --- PICKARR-DISCOVERY (2e instance de pickarr qui écrit uniquement dans Musiques/Decouvertes) ---
-  # A retirer le jour où pickarr saura écrire dans un sous-dossier (voir PICKARR_SUBFOLDER).
-  pickarr-discovery:
-    image: registry.gitlab.com/dhmetha/pickarr:unetha
-    container_name: pickarr-discovery
-    user: "1000:1000"
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    environment:
-      - TZ=Europe/Paris
-      - Pickarr__Password=${PICKARR_PASSWORD}
-      - Pickarr__ApiKey=${DISCOVERY_PICKARR_API_KEY}
-      - Pickarr__Soulseek__Url=http://gluetun:5030
-      - Pickarr__Soulseek__ApiKey=${SLSKD_API_KEY}
-      - Pickarr__Soulseek__DownloadsPath=/soulseek
-      - Pickarr__Plex__Url=http://host.docker.internal:32400
-      - Pickarr__Plex__Token=${PLEX_TOKEN}
-      - Pickarr__Plex__LibraryPathInPlex=/media/Musiques/Decouvertes
-      - Pickarr__LastFm__ApiKey=${LASTFM_API_KEY}
-      - Pickarr__Discogs__Token=${DISCOGS_TOKEN}
-    volumes:
-      - /opt/appdata/pickarr-discovery:/data
-      - /mnt/media/Musiques/Decouvertes:/music
-      - /mnt/media/downloads/soulseek:/soulseek
-    depends_on:
-      - slskd
-    restart: unless-stopped
-
-  # --- DISCOVERR (Last.fm -> pickarr-discovery -> playlist Plex, ménage des titres non aimés) ---
+  # --- DISCOVERR (Last.fm -> pickarr (sous-dossier Decouvertes) -> playlist Plex, ménage des titres non aimés) ---
   discoverr:
     image: ghcr.io/jboucly/discoverr:latest
     container_name: discoverr
@@ -232,15 +206,17 @@ services:
       - DISCOVERR_PASSWORD=${DISCOVERR_PASSWORD}
       - DISCOVERR_API_KEY=${DISCOVERR_API_KEY}
       - LASTFM_API_KEY=${LASTFM_API_KEY}
-      - PICKARR_URL=http://pickarr-discovery:8080
-      - PICKARR_API_KEY=${DISCOVERY_PICKARR_API_KEY}
-      - PICKARR_SUBFOLDER=
-      - PICKARR_LIBRARY_SUBDIR=Decouvertes
+      # Les découvertes vont dans Musiques/pickarr/Decouvertes (sous-dossier de la bibliothèque du pickarr principal)
+      - PICKARR_URL=http://pickarr:8080
+      - PICKARR_API_KEY=${PICKARR_API_KEY}
+      - PICKARR_SUBFOLDER=Decouvertes
+      - PICKARR_LIBRARY_SUBDIR=pickarr
+      - ALLOW_DELETE_IN_PICKARR_LIBRARY=true # le ménage supprime dans pickarr/Decouvertes, jamais ailleurs
       - PLEX_URL=http://host.docker.internal:32400
       - PLEX_TOKEN=${PLEX_TOKEN}
       - MUSIC_ROOT=/music
       - PLEX_MUSIC_ROOT=/media/Musiques
-      - DISCOVERY_SUBDIR=Decouvertes
+      - DISCOVERY_SUBDIR=pickarr/Decouvertes
       # Premier démarrage seulement : profil « Moi » créé avec ce compte, et mode simulation activé.
       - LASTFM_USER=${LASTFM_USER}
       - DRY_RUN=${DISCOVERR_DRY_RUN:-true}
@@ -248,7 +224,7 @@ services:
       - /opt/appdata/discoverr:/data
       - /mnt/media/Musiques:/music
     depends_on:
-      - pickarr-discovery
+      - pickarr
     restart: unless-stopped
 
 volumes:
