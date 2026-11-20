@@ -66,6 +66,7 @@ services:
     volumes:
       - plex_config:/config
       - /mnt/media:/media
+      - /mnt/donnees/Musiques:/media/Musiques
     restart: unless-stopped
 
   # --- 5. AUTOMATISATION (ARR STACK) ---
@@ -113,6 +114,7 @@ services:
     volumes:
       - lidarr_config:/config
       - /mnt/media:/media
+      - /mnt/donnees/Musiques:/media/Musiques
     restart: unless-stopped
 
   # --- PROWLARR (Gestionnaire d'indexeurs/Trackers) ---
@@ -152,6 +154,7 @@ services:
     volumes:
       - /opt/appdata/slskd:/app
       - /mnt/media:/media
+      - /mnt/donnees/Musiques:/media/Musiques
     depends_on:
       gluetun:
         condition: service_healthy
@@ -182,7 +185,7 @@ services:
       - Pickarr__Discogs__Token=${DISCOGS_TOKEN}
     volumes:
       - /opt/appdata/pickarr:/data
-      - /mnt/media/Musiques/pickarr:/music
+      - /mnt/donnees/Musiques/pickarr:/music
       - /mnt/media/downloads/soulseek:/soulseek
     depends_on:
       - slskd
@@ -222,7 +225,7 @@ services:
       - DRY_RUN=${DISCOVERR_DRY_RUN:-true}
     volumes:
       - /opt/appdata/discoverr:/data
-      - /mnt/media/Musiques:/music
+      - /mnt/donnees/Musiques:/music
     depends_on:
       - pickarr
     restart: unless-stopped
